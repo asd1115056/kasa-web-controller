@@ -1,7 +1,10 @@
 [project]
 name = "kasa-web-controller"
 version = "0.1.0"
-description = "Add your description here"
+description = "Web-based controller for TP-Link Kasa smart devices"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "python-kasa>=0.7.0",
+    "python-dotenv>=1.0.0",
+]
