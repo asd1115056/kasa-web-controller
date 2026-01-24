@@ -40,45 +40,49 @@ async def discover_devices(raw: bool = False):
 
     print("Discovering devices...\n")
 
-    found_devices = await Discover.discover(credentials=credentials)
+    device_count = 0
 
-    if not found_devices:
-        print("No devices found.")
-        return
+    async def on_device_discovered(device):
+        """Callback for each discovered device."""
+        nonlocal device_count
+        device_count += 1
 
-    print(f"Found {len(found_devices)} device(s):\n")
+        if raw:
+            print(f"\n[{device.host}]")
+            print("-" * 40)
+            print("Device attributes:")
+            pprint(vars(device))
+            if hasattr(device, "_discovery_info"):
+                print("\nDiscovery info:")
+                pprint(device._discovery_info)
+            print("=" * 60)
+        else:
+            try:
+                await device.update()
+                print(f"  IP: {device.host}")
+                print(f"  MAC: {device.mac}")
+                print(f"  Model: {device.model}")
+                print(f"  Alias: {device.alias}")
+            except Exception as e:
+                print(f"  IP: {device.host}")
+                print(f"  MAC: {getattr(device, 'mac', 'Unknown')}")
+                print(f"  Model: {getattr(device, 'model', 'Unknown')}")
+                print(f"  Error: {type(e).__name__}: {e}")
+            print()
 
     if raw:
         print("=" * 60)
 
-    try:
-        for ip, device in found_devices.items():
-            if raw:
-                print(f"\n[{ip}]")
-                print("-" * 40)
-                print("Device attributes:")
-                pprint(vars(device))
-                if hasattr(device, "_discovery_info"):
-                    print("\nDiscovery info:")
-                    pprint(device._discovery_info)
-                print("=" * 60)
-            else:
-                try:
-                    await device.update()
-                    print(f"  IP: {ip}")
-                    print(f"  MAC: {device.mac}")
-                    print(f"  Model: {device.model}")
-                    print(f"  Alias: {device.alias}")
-                except Exception as e:
-                    print(f"  IP: {ip}")
-                    print(f"  MAC: {getattr(device, 'mac', 'Unknown')}")
-                    print(f"  Model: {getattr(device, 'model', 'Unknown')}")
-                    print(f"  Error: {type(e).__name__}: {e}")
-                print()
-    finally:
-        # Close all device connections to avoid "Unclosed client session" warnings
-        for device in found_devices.values():
-            await device.disconnect()
+    found_devices = await Discover.discover(
+        on_discovered=on_device_discovered,
+        credentials=credentials,
+    )
+
+    print(f"\nDiscovery complete. Found {device_count} device(s).")
+
+    # Close all device connections
+    for device in found_devices.values():
+        await device.disconnect()
 
 
 if __name__ == "__main__":
