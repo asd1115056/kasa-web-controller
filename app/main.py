@@ -8,14 +8,13 @@ Uses ID-based device identification with smart IP caching.
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .device_manager import DeviceManager
+from .device_manager import DeviceManager, DeviceOfflineError, DeviceOperationError
 
 # Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -32,9 +31,16 @@ device_manager: DeviceManager | None = None
 
 
 # === Pydantic Models ===
-class ToggleRequest(BaseModel):
-    action: str
-    child_id: Optional[str] = None
+class ControlRequest(BaseModel):
+    action: str  # "on" or "off"
+    child_id: str | None = None  # For power strips
+
+
+def get_device_manager() -> DeviceManager:
+    """Dependency to get the device manager instance."""
+    if not device_manager:
+        raise HTTPException(status_code=503, detail="Device manager not initialized")
+    return device_manager
 
 
 # === Application Lifecycle ===
@@ -64,27 +70,37 @@ app = FastAPI(
 
 # === API Endpoints ===
 @app.get("/api/devices")
-async def list_devices():
+async def list_devices(dm: DeviceManager = Depends(get_device_manager)):
     """Get all whitelisted devices with their current status."""
-    if not device_manager:
-        raise HTTPException(status_code=503, detail="Device manager not initialized")
-
     try:
-        devices = await device_manager.get_all_devices()
+        devices = await dm.get_all_devices()
         return {"devices": devices}
     except Exception as e:
         logger.error(f"Failed to list devices: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list devices: {str(e)}")
 
 
-@app.post("/api/device/{device_id}/toggle")
-async def toggle_device(device_id: str, request: ToggleRequest):
-    """Toggle a device or child outlet on/off or perform a power cycle."""
-    if not device_manager:
-        raise HTTPException(status_code=503, detail="Device manager not initialized")
-
+@app.get("/api/devices/{device_id}")
+async def get_device(device_id: str, dm: DeviceManager = Depends(get_device_manager)):
+    """Get a single device's status."""
     try:
-        result = await device_manager.control_device(
+        return await dm.get_device_status(device_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to get device {device_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get device: {str(e)}")
+
+
+@app.patch("/api/devices/{device_id}")
+async def control_device(
+    device_id: str,
+    request: ControlRequest,
+    dm: DeviceManager = Depends(get_device_manager),
+):
+    """Control a device (on/off)."""
+    try:
+        result = await dm.control_device(
             device_id=device_id,
             action=request.action,
             child_id=request.child_id,
@@ -92,20 +108,39 @@ async def toggle_device(device_id: str, request: ToggleRequest):
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except DeviceOfflineError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": "offline", "message": str(e)},
+        )
+    except DeviceOperationError as e:
+        raise HTTPException(
+            status_code=502,
+            detail={"error": "operation_failed", "message": str(e)},
+        )
     except Exception as e:
         logger.error(f"Failed to control device {device_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Control failed: {str(e)}")
 
 
-@app.post("/api/discover")
-async def force_discover():
-    """Force a full device discovery to update IP cache."""
-    if not device_manager:
-        raise HTTPException(status_code=503, detail="Device manager not initialized")
-
+@app.post("/api/devices/{device_id}/refresh")
+async def refresh_device(device_id: str, dm: DeviceManager = Depends(get_device_manager)):
+    """Refresh a single device (targeted discover)."""
     try:
-        await device_manager.discover_all(force=True)
-        return {"success": True, "message": "Discovery completed"}
+        return await dm.refresh_device(device_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to refresh device {device_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Refresh failed: {str(e)}")
+
+
+@app.post("/api/devices/discover")
+async def discover_all(dm: DeviceManager = Depends(get_device_manager)):
+    """Force a full device discovery (use sparingly)."""
+    try:
+        await dm.discover_all(force=True)
+        return {"success": True}
     except Exception as e:
         logger.error(f"Discovery failed: {e}")
         raise HTTPException(status_code=500, detail=f"Discovery failed: {str(e)}")
