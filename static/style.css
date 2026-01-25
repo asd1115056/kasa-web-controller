@@ -1,0 +1,227 @@
+/* === Base === */
+body {
+    background-color: #f5f5f5;
+}
+
+/* === Device Cards === */
+.device-card {
+    margin-bottom: 1rem;
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    transition: box-shadow 0.2s;
+}
+
+.device-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.device-card .card-header {
+    border-bottom: none;
+    padding: 1rem 1.25rem;
+}
+
+.device-card .card-body {
+    padding: 0;
+}
+
+/* === Device Status States === */
+.device-card.state-on .card-header {
+    background: linear-gradient(135deg, #198754, #157347);
+    color: white;
+}
+
+.device-card.state-off .card-header {
+    background: linear-gradient(135deg, #6c757d, #5a6268);
+    color: white;
+}
+
+.device-card.state-offline .card-header {
+    background: linear-gradient(135deg, #adb5bd, #868e96);
+    color: white;
+}
+
+.device-card.state-mixed .card-header {
+    background: linear-gradient(135deg, #fd7e14, #e8590c);
+    color: white;
+}
+
+/* === Status Badge === */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* === Toggle Switch === */
+.toggle-switch {
+    position: relative;
+    width: 80px;
+    height: 40px;
+    background: #dee2e6;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: background 0.3s;
+    border: none;
+    padding: 0;
+}
+
+.toggle-switch:hover {
+    background: #ced4da;
+}
+
+.toggle-switch.is-on {
+    background: #198754;
+}
+
+.toggle-switch.is-on:hover {
+    background: #157347;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 32px;
+    height: 32px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch.is-on::after {
+    transform: translateX(40px);
+}
+
+.toggle-switch:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* === Single Device Control === */
+.single-device-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: #f8f9fa;
+}
+
+/* === Child Outlets (Power Strip) === */
+.child-outlet {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e9ecef;
+    background: white;
+    transition: background 0.2s;
+}
+
+.child-outlet:hover {
+    background: #f8f9fa;
+}
+
+.child-outlet:last-child {
+    border-bottom: none;
+}
+
+.child-outlet.is-on {
+    background: linear-gradient(90deg, rgba(25, 135, 84, 0.1), transparent);
+}
+
+.outlet-name {
+    font-weight: 500;
+    color: #212529;
+}
+
+.outlet-status {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-left: 0.5rem;
+}
+
+.outlet-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* === Offline State === */
+.offline-message {
+    padding: 1.5rem;
+    text-align: center;
+    color: #6c757d;
+    background: #f8f9fa;
+}
+
+/* === Loading State === */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.device-card.loading .toggle-switch::after {
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* === Header === */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.page-header h1 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+/* === Device Info === */
+.device-model {
+    font-size: 0.8rem;
+    opacity: 0.8;
+    margin-top: 0.25rem;
+}
+
+/* === Responsive === */
+@media (max-width: 576px) {
+    .toggle-switch {
+        width: 60px;
+        height: 32px;
+    }
+
+    .toggle-switch::after {
+        width: 24px;
+        height: 24px;
+    }
+
+    .toggle-switch.is-on::after {
+        transform: translateX(28px);
+    }
+
+    .child-outlet {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .outlet-controls {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}

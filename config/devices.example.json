@@ -1,0 +1,12 @@
+{
+  "devices": [
+    {
+      "mac": "AA:BB:CC:DD:EE:FF",
+      "name": "Living Room Strip"
+    },
+    {
+      "mac": "11:22:33:44:55:66",
+      "name": "Bedroom Plug"
+    }
+  ]
+}

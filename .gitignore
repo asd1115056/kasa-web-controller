@@ -11,3 +11,5 @@ wheels/
 
 # Config with credentials
 config/.env
+config/devices.json
+config/cache.json
