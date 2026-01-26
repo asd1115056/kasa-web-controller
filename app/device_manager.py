@@ -16,7 +16,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,11 +27,6 @@ logger = logging.getLogger(__name__)
 
 # Default paths - config is at project root, not in app folder
 DEFAULT_CONFIG_DIR = Path(__file__).parent.parent / "config"
-
-# Cooldown period before retrying discovery for offline devices
-OFFLINE_COOLDOWN = timedelta(minutes=2)
-MAX_DISCOVERY_RETRIES = 3  # Number of failures before cooldown
-
 
 # === Custom Exceptions ===
 class DeviceOfflineError(Exception):
@@ -119,8 +114,6 @@ class DeviceManager:
         self._id_to_mac: dict[str, str] = {}  # ID -> MAC (reverse lookup)
         self._cache: dict[str, CacheEntry] = {}  # MAC -> CacheEntry (in-memory only)
         self._credentials: Credentials | None = None
-        self._offline_until: dict[str, datetime] = {}  # MAC -> retry_after time
-        self._discovery_failures: dict[str, int] = {}  # MAC -> failure count
 
         # Concurrency control
         self._device_locks: dict[str, asyncio.Lock] = {}  # MAC -> Lock
@@ -177,13 +170,11 @@ class DeviceManager:
 
         # Run initial discovery to populate cache
         logger.info("Running initial device discovery...")
-        await self.discover_all(force=True)
+        await self.discover_all()
 
     async def shutdown(self) -> None:
         """Shutdown the device manager (clear state)."""
         self._cache.clear()
-        self._offline_until.clear()
-        self._discovery_failures.clear()
 
     async def _connect_by_ip(self, ip: str) -> Device | None:
         """
@@ -224,20 +215,8 @@ class DeviceManager:
 
         return found_ip
 
-    async def discover_all(self, force: bool = False) -> None:
-        """
-        Discover all whitelisted devices and update cache.
-
-        Args:
-            force: If True, clear offline cooldowns and failure counts.
-        """
-        now = datetime.now()
-
-        # Clear offline cooldown and failure counts on force discover
-        if force:
-            self._offline_until.clear()
-            self._discovery_failures.clear()
-
+    async def discover_all(self) -> None:
+        """Discover all whitelisted devices and update cache."""
         logger.info("Starting full device discovery...")
         discovered_macs: set[str] = set()
 
@@ -308,24 +287,6 @@ class DeviceManager:
             },
         )
 
-    def _handle_discovery_failure(self, mac: str, reason: str) -> None:
-        """Handle discovery/connection failure with retry counting."""
-        failures = self._discovery_failures.get(mac, 0) + 1
-        self._discovery_failures[mac] = failures
-
-        if failures >= MAX_DISCOVERY_RETRIES:
-            self._offline_until[mac] = datetime.now() + OFFLINE_COOLDOWN
-            self._discovery_failures[mac] = 0  # Reset for next cycle
-            logger.warning(
-                f"Device {mac} {reason} (attempt {failures}/{MAX_DISCOVERY_RETRIES}), "
-                f"cooldown for {OFFLINE_COOLDOWN}"
-            )
-        else:
-            logger.warning(
-                f"Device {mac} {reason} (attempt {failures}/{MAX_DISCOVERY_RETRIES})"
-            )
-        return None
-
     async def get_device(self, mac: str) -> Device | None:
         """
         Get a connected device by MAC address.
@@ -354,50 +315,28 @@ class DeviceManager:
                 device_mac = getattr(device, "mac", None)
                 if device_mac and normalize_mac(device_mac) == mac:
                     self._update_cache_from_device(mac, device)
-                    self._discovery_failures.pop(mac, None)
                     return device
                 else:
                     # IP belongs to different device now
                     logger.warning(f"IP {cached.ip} no longer belongs to {mac}")
                     await device.disconnect()
 
-        # Check if device is in offline cooldown
-        if mac in self._offline_until:
-            if datetime.now() < self._offline_until[mac]:
-                logger.debug(f"Device {mac} in offline cooldown, skipping discovery")
-                return None
-            else:
-                del self._offline_until[mac]  # Cooldown expired
-                self._discovery_failures.pop(mac, None)  # Reset retries
-
         # Cache miss or connection failed - discover
         logger.info(f"Discovering IP for {mac}...")
         ip = await self._discover_device_ip(mac)
 
         if not ip:
-            return self._handle_discovery_failure(mac, "not found on network")
+            logger.warning(f"Device {mac} not found on network")
+            return None
 
         # Connect to discovered IP
         device = await self._connect_by_ip(ip)
         if device:
             self._update_cache_from_device(mac, device)
-            self._discovery_failures.pop(mac, None)  # Reset on success
             return device
 
-        # Discovery found IP but connection failed - also count as failure
-        return self._handle_discovery_failure(mac, f"found at {ip} but connection failed")
-
-    def _get_device_status_type(self, mac: str) -> str:
-        """
-        Determine device status type based on failure state.
-
-        Returns: "online", "temp_unavailable", or "offline"
-        """
-        if mac in self._offline_until:
-            return "offline"
-        if mac in self._discovery_failures:
-            return "temp_unavailable"
-        return "online"
+        logger.warning(f"Device {mac} found at {ip} but connection failed")
+        return None
 
     def _build_device_response(
         self,
@@ -438,7 +377,7 @@ class DeviceManager:
                 ] if is_strip else [],
             })
         else:
-            result["status"] = self._get_device_status_type(mac)
+            result["status"] = "offline"
             if mac in self._cache:
                 cached = self._cache[mac]
                 result.update({
@@ -594,18 +533,12 @@ class DeviceManager:
         """
         Refresh a single device (targeted discover).
 
-        Clears offline cooldown and failure count, then attempts to reconnect.
-
         Returns:
             Dict with success status and device info
         """
         mac = self.resolve_id(device_id)
         if not mac:
             raise ValueError(f"Device {device_id} not found")
-
-        # Clear cooldown and failure count
-        self._offline_until.pop(mac, None)
-        self._discovery_failures.pop(mac, None)
 
         # Attempt to reconnect
         logger.info(f"Refreshing device {device_id} ({mac})...")

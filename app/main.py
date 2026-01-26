@@ -139,7 +139,7 @@ async def refresh_device(device_id: str, dm: DeviceManager = Depends(get_device_
 async def discover_all(dm: DeviceManager = Depends(get_device_manager)):
     """Force a full device discovery (use sparingly)."""
     try:
-        await dm.discover_all(force=True)
+        await dm.discover_all()
         return {"success": True}
     except Exception as e:
         logger.error(f"Discovery failed: {e}")
