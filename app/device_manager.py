@@ -22,6 +22,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 from kasa import Credentials, Device, DeviceConfig, Discover
+from kasa.exceptions import AuthenticationError
 
 logger = logging.getLogger(__name__)
 
@@ -246,12 +247,29 @@ class DeviceManager:
 
                     # Update cache if device is in whitelist
                     if mac in self._whitelist:
-                        await device.update()
-                        self._update_cache_from_device(mac, device)
-                        logger.info(
-                            f"Found whitelisted device: {device.alias or self._whitelist[mac].name} "
-                            f"({device.model}) at {device.host}"
-                        )
+                        try:
+                            await device.update()
+                            self._update_cache_from_device(mac, device)
+                            logger.info(
+                                f"Found whitelisted device: {device.alias or self._whitelist[mac].name} "
+                                f"({device.model}) at {device.host}"
+                            )
+                        except AuthenticationError:
+                            # Device requires different credentials - cache IP but skip state
+                            logger.warning(
+                                f"Authentication failed for device at {device.host} ({mac}). "
+                                "Check KASA_USERNAME and KASA_PASSWORD in config/.env"
+                            )
+                            # Still cache the IP so we know where the device is
+                            self._cache[mac] = CacheEntry(
+                                ip=device.host,
+                                last_seen=datetime.now(),
+                                alias=self._whitelist[mac].name,
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to update device at {device.host} ({mac}): {e}"
+                            )
                 except ValueError:
                     pass
 
