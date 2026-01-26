@@ -68,28 +68,17 @@ function renderDevices(devices) {
 }
 
 function getDeviceState(device) {
-    // Handle three status types: online, temp_unavailable, offline
+    // Returns connection status only (power state shown by toggles)
     if (device.status === 'offline') return 'offline';
     if (device.status === 'temp_unavailable') return 'connecting';
-    if (device.status !== 'online') return 'offline';
-
-    // Online device - check power state
-    if (device.is_strip && device.children) {
-        const onCount = device.children.filter(c => c.is_on).length;
-        if (onCount === 0) return 'off';
-        if (onCount === device.children.length) return 'on';
-        return 'mixed';
-    }
-    return device.is_on ? 'on' : 'off';
+    return 'online';
 }
 
 function getStatusText(state) {
     const texts = {
-        on: 'ON',
-        off: 'OFF',
+        online: 'Online',
         offline: 'Offline',
-        connecting: 'Connecting...',
-        mixed: 'Mixed'
+        connecting: 'Connecting...'
     };
     return texts[state] || state;
 }

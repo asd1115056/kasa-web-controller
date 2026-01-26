@@ -26,24 +26,19 @@ body {
     padding: 0;
 }
 
-/* === Device Status States === */
-.device-card.state-on .card-header {
+/* === Device Connection States === */
+.device-card.state-online .card-header {
     background: linear-gradient(135deg, #198754, #157347);
     color: white;
 }
 
-.device-card.state-off .card-header {
-    background: linear-gradient(135deg, #6c757d, #5a6268);
+.device-card.state-connecting .card-header {
+    background: linear-gradient(135deg, #fd7e14, #e8590c);
     color: white;
 }
 
 .device-card.state-offline .card-header {
     background: linear-gradient(135deg, #adb5bd, #868e96);
-    color: white;
-}
-
-.device-card.state-mixed .card-header {
-    background: linear-gradient(135deg, #fd7e14, #e8590c);
     color: white;
 }
 
