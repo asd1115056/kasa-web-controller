@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
-from kasa import Credentials, Device, Discover
+from kasa import Credentials, Device, DeviceConfig, Discover
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +193,8 @@ class DeviceManager:
         More stable when network is congested.
         """
         try:
-            device = await Device.connect(host=ip, credentials=self._credentials)
+            config = DeviceConfig(host=ip, credentials=self._credentials)
+            device = await Device.connect(config=config)
             await device.update()
             return device
         except Exception as e:
