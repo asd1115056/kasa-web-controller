@@ -197,12 +197,17 @@ function escapeHtml(text) {
 
 // === Event Handlers ===
 async function loadDevices() {
+    const refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn) refreshBtn.classList.add('spinning');
+
     try {
         const data = await fetchDevices();
         renderDevices(data.devices);
     } catch (error) {
         console.error('Load devices error:', error);
         showAlert('Failed to load devices: ' + error.message);
+    } finally {
+        if (refreshBtn) refreshBtn.classList.remove('spinning');
     }
 }
 

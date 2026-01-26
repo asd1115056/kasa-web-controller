@@ -165,12 +165,34 @@ body {
 }
 
 .device-card.loading .toggle-switch::after {
-    animation: pulse 1s infinite;
+    animation: pulse 0.6s ease-in-out infinite;
 }
 
 @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    50% {
+        opacity: 0.4;
+        box-shadow: 0 0 8px rgba(13, 110, 253, 0.6);
+    }
+}
+
+/* === Refresh Button === */
+.refresh-icon {
+    display: inline-block;
+    font-size: 1.2rem;
+    line-height: 1;
+}
+
+#refresh-btn.spinning .refresh-icon {
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 /* === Header === */
