@@ -28,6 +28,12 @@ logger = logging.getLogger(__name__)
 # Default paths - config is at project root, not in app folder
 DEFAULT_CONFIG_DIR = Path(__file__).parent.parent / "config"
 
+# Connection settings
+CONNECTION_TIMEOUT = 10  # Seconds to wait for device response (default is 5)
+CONNECTION_RETRIES = 3   # Number of retry attempts on connection failure
+RETRY_DELAY = 0.5        # Seconds between retries
+
+
 # === Custom Exceptions ===
 class DeviceOfflineError(Exception):
     """Device confirmed offline (cannot connect after retries)."""
@@ -178,19 +184,30 @@ class DeviceManager:
 
     async def _connect_by_ip(self, ip: str) -> Device | None:
         """
-        Try to connect to a device by IP address.
+        Try to connect to a device by IP address with retry logic.
 
         Uses Device.connect() instead of discover_single() to skip UDP discovery.
-        More stable when network is congested.
+        Retries on transient network failures.
         """
-        try:
-            config = DeviceConfig(host=ip, credentials=self._credentials)
-            device = await Device.connect(config=config)
-            await device.update()
-            return device
-        except Exception as e:
-            logger.debug(f"Failed to connect to {ip}: {e}")
-            return None
+        config = DeviceConfig(
+            host=ip,
+            credentials=self._credentials,
+            timeout=CONNECTION_TIMEOUT,
+        )
+
+        for attempt in range(CONNECTION_RETRIES):
+            try:
+                device = await Device.connect(config=config)
+                await device.update()
+                return device
+            except Exception as e:
+                if attempt < CONNECTION_RETRIES - 1:
+                    logger.debug(f"Connection to {ip} failed (attempt {attempt + 1}): {e}")
+                    await asyncio.sleep(RETRY_DELAY)
+                else:
+                    logger.debug(f"Failed to connect to {ip} after {CONNECTION_RETRIES} attempts: {e}")
+
+        return None
 
     async def _discover_device_ip(self, target_mac: str) -> str | None:
         """Discover a device's IP by its MAC address via network scan."""
