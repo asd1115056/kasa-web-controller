@@ -422,9 +422,6 @@ class DeviceManager:
         for mac in self._whitelist:
             try:
                 device = await self.get_device(mac)
-                if device:
-                    await device.update()
-                    self._update_cache_from_device(mac, device)
                 results.append(self._build_device_response(mac, device))
             except Exception as e:
                 logger.error(f"Error getting device {mac}: {e}")
@@ -444,9 +441,6 @@ class DeviceManager:
 
         try:
             device = await self.get_device(mac)
-            if device:
-                await device.update()
-                self._update_cache_from_device(mac, device)
             return self._build_device_response(mac, device)
         except Exception as e:
             logger.error(f"Error getting device {mac}: {e}")
@@ -489,8 +483,6 @@ class DeviceManager:
                 raise DeviceOfflineError(f"Device {device_id} is offline")
 
             try:
-                await device.update()
-
                 # Determine target (device or child)
                 target = device
                 if child_id:
@@ -562,8 +554,6 @@ class DeviceManager:
         device = await self.get_device(mac)
 
         if device:
-            await device.update()
-            self._update_cache_from_device(mac, device)
             return {
                 "success": True,
                 "id": device_id,
