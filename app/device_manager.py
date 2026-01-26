@@ -15,6 +15,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -33,6 +34,7 @@ DEFAULT_CONFIG_DIR = Path(__file__).parent.parent / "config"
 CONNECTION_TIMEOUT = 10  # Seconds to wait for device response (default is 5)
 CONNECTION_RETRIES = 3   # Number of retry attempts on connection failure
 RETRY_DELAY = 0.5        # Seconds between retries
+COMMAND_INTERVAL = 0.5   # Minimum seconds between commands to same device
 
 
 # === Custom Exceptions ===
@@ -124,6 +126,7 @@ class DeviceManager:
 
         # Concurrency control
         self._device_locks: dict[str, asyncio.Lock] = {}  # MAC -> Lock
+        self._last_command_time: dict[str, float] = {}  # MAC -> timestamp (rate limiting)
 
     def _load_credentials(self) -> Credentials | None:
         """Load credentials from config/.env if it exists."""
@@ -169,6 +172,19 @@ class DeviceManager:
     def _get_lock(self, mac: str) -> asyncio.Lock:
         """Get or create a lock for a device (thread-safe via setdefault)."""
         return self._device_locks.setdefault(mac, asyncio.Lock())
+
+    async def _wait_for_rate_limit(self, mac: str) -> None:
+        """Wait if needed to respect per-device command interval."""
+        now = time.monotonic()
+        last_time = self._last_command_time.get(mac, 0)
+        elapsed = now - last_time
+
+        if elapsed < COMMAND_INTERVAL:
+            wait_time = COMMAND_INTERVAL - elapsed
+            logger.debug(f"Rate limiting {mac}: waiting {wait_time:.2f}s")
+            await asyncio.sleep(wait_time)
+
+        self._last_command_time[mac] = time.monotonic()
 
     async def initialize(self) -> None:
         """Initialize the device manager (load configs, run initial discovery)."""
@@ -338,6 +354,9 @@ class DeviceManager:
         if mac not in self._whitelist:
             logger.warning(f"Device {mac} not in whitelist")
             return None
+
+        # Rate limit per device
+        await self._wait_for_rate_limit(mac)
 
         # Try cached IP first
         if mac in self._cache:
