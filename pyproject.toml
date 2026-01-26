@@ -13,3 +13,9 @@ dependencies = [
 
 [project.scripts]
 kasa-web = "app.main:run"
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+packages = ["app"]
