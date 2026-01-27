@@ -96,11 +96,10 @@ Example: MAC `AA:BB:CC:DD:EE:FF` → ID `a1b2c3d4`
 
 ### Device Status
 
-| Status | Description |
-|--------|-------------|
-| `online` | Device is connected and responding |
-| `temp_unavailable` | Connection failed, will retry on next request |
-| `offline` | Multiple failures, in cooldown (2 min) before retry |
+| Status    | Description                                   |
+|-----------|-----------------------------------------------|
+| `online`  | Device is connected and responding            |
+| `offline` | Connection failed, will retry on next request |
 
 ### Examples
 

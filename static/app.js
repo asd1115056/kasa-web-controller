@@ -70,7 +70,6 @@ function renderDevices(devices) {
 function getDeviceState(device) {
     // Returns connection status only (power state shown by toggles)
     if (device.status === 'offline') return 'offline';
-    if (device.status === 'temp_unavailable') return 'connecting';
     return 'online';
 }
 
@@ -78,7 +77,6 @@ function getStatusText(state) {
     const texts = {
         online: 'Online',
         offline: 'Offline',
-        connecting: 'Connecting...'
     };
     return texts[state] || state;
 }
@@ -108,7 +106,7 @@ function renderDeviceCard(device) {
             const lastUpdated = lastState.last_updated ? new Date(lastState.last_updated).toLocaleString() : '';
             bodyHtml = `
                 <div class="offline-message">
-                    <div>Device is ${device.status === 'temp_unavailable' ? 'temporarily unavailable' : 'offline'}</div>
+                    <div>Device is offline</div>
                     ${lastUpdated ? `<small class="text-muted">Last seen: ${lastUpdated}</small>` : ''}
                     <div class="mt-2">
                         <small>Last state: ${lastState.is_on ? 'ON' : 'OFF'}</small>
