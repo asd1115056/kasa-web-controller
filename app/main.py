@@ -70,14 +70,20 @@ app = FastAPI(
 
 # === API Endpoints ===
 @app.get("/api/devices")
-async def list_devices(dm: DeviceManager = Depends(get_device_manager)):
-    """Get all whitelisted devices with their current status."""
+def list_devices(dm: DeviceManager = Depends(get_device_manager)):
+    """Get cached status of all devices (lightweight, for polling)."""
+    return {"devices": dm.get_cached_status()}
+
+
+@app.get("/api/devices/sync")
+async def sync_devices(dm: DeviceManager = Depends(get_device_manager)):
+    """Sync all devices - connects to each device to get live status."""
     try:
         devices = await dm.get_all_devices()
         return {"devices": devices}
     except Exception as e:
-        logger.error(f"Failed to list devices: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list devices: {str(e)}")
+        logger.error(f"Failed to sync devices: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync devices: {str(e)}")
 
 
 @app.get("/api/devices/{device_id}")

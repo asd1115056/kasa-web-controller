@@ -4,7 +4,7 @@
 
 // === API Functions ===
 async function fetchDevices() {
-    const response = await fetch('/api/devices');
+    const response = await fetch('/api/devices/sync');
     if (!response.ok) throw new Error('Failed to fetch devices');
     return response.json();
 }
@@ -125,6 +125,10 @@ function renderDeviceCard(device) {
         </button>
     ` : '';
 
+    // Format last updated time
+    const lastUpdated = device.last_state?.last_updated || device.last_updated;
+    const updatedTime = lastUpdated ? formatTime(lastUpdated) : '';
+
     return `
         <div class="card device-card state-${state}" data-id="${device.id}">
             <div class="card-header d-flex justify-content-between align-items-center">
@@ -134,6 +138,7 @@ function renderDeviceCard(device) {
                 </div>
                 <div class="d-flex align-items-center">
                     <span class="status-badge">${statusText}</span>
+                    ${updatedTime ? `<span class="last-updated ms-2" data-device-id="${device.id}">${updatedTime}</span>` : ''}
                     ${refreshBtn}
                 </div>
             </div>
@@ -191,6 +196,15 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function formatTime(isoString) {
+    try {
+        const date = new Date(isoString);
+        return date.toLocaleTimeString();
+    } catch {
+        return '';
+    }
 }
 
 function updateDeviceCard(deviceId, result, childId) {
@@ -286,7 +300,79 @@ async function handleRefresh(deviceId) {
     }
 }
 
+// === Polling ===
+const POLL_INTERVAL = 5000;  // 5 seconds
+let pollTimer = null;
+
+async function pollStatus() {
+    try {
+        const response = await fetch('/api/devices');
+        if (response.ok) {
+            const data = await response.json();
+            updateAllDeviceStatus(data.devices);
+        }
+    } catch (error) {
+        console.error('Poll error:', error);
+    }
+}
+
+function updateAllDeviceStatus(devices) {
+    for (const device of devices) {
+        updateDeviceStatus(device.id, device);
+    }
+}
+
+function updateDeviceStatus(deviceId, device) {
+    const card = document.querySelector(`[data-id="${deviceId}"]`);
+    if (!card) return;
+
+    // Update last_updated time
+    const lastUpdatedSpan = card.querySelector(`.last-updated[data-device-id="${deviceId}"]`);
+    if (lastUpdatedSpan && device.last_updated) {
+        lastUpdatedSpan.textContent = formatTime(device.last_updated);
+    }
+
+    if (device.children && device.children.length > 0) {
+        // Strip device: update each child
+        for (const child of device.children) {
+            const buttons = card.querySelectorAll('.toggle-switch');
+            for (const btn of buttons) {
+                const onclick = btn.getAttribute('onclick') || '';
+                if (onclick.includes(`'${child.id}'`)) {
+                    updateToggleButton(btn, deviceId, child.id, child.is_on);
+                    const outlet = btn.closest('.child-outlet');
+                    if (outlet) {
+                        outlet.classList.toggle('is-on', child.is_on);
+                        const statusSpan = outlet.querySelector('.outlet-status');
+                        if (statusSpan) statusSpan.textContent = child.is_on ? 'ON' : 'OFF';
+                    }
+                    break;
+                }
+            }
+        }
+    } else if (device.is_on !== undefined) {
+        // Single device
+        const btn = card.querySelector('.single-device-control .toggle-switch');
+        if (btn) {
+            updateToggleButton(btn, deviceId, null, device.is_on);
+        }
+    }
+}
+
+function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(pollStatus, POLL_INTERVAL);
+}
+
+function stopPolling() {
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+}
+
 // === Initialize ===
 document.addEventListener('DOMContentLoaded', () => {
     loadDevices();
+    startPolling();
 });

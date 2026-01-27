@@ -81,7 +81,8 @@ Credentials are required for newer Kasa devices that use TP-Link cloud authentic
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/devices` | List all devices with status |
+| GET | `/api/devices` | Get cached status (lightweight, for polling) |
+| GET | `/api/devices/sync` | Sync all devices (connects to each device) |
 | GET | `/api/devices/{id}` | Get single device status |
 | PATCH | `/api/devices/{id}` | Control device (on/off) |
 | POST | `/api/devices/{id}/refresh` | Refresh single device (targeted discover) |
@@ -102,7 +103,27 @@ Example: MAC `AA:BB:CC:DD:EE:FF` → ID `a1b2c3d4`
 
 ### Examples
 
-#### GET /api/devices
+#### GET /api/devices (cached status)
+
+```json
+{
+  "devices": [
+    {
+      "id": "a1b2c3d4",
+      "name": "Living Room Strip",
+      "status": "online",
+      "is_on": true,
+      "children": [
+        { "id": "0", "alias": "Outlet 1", "is_on": true },
+        { "id": "1", "alias": "Outlet 2", "is_on": false }
+      ],
+      "last_updated": "2024-01-15T10:30:00.000Z"
+    }
+  ]
+}
+```
+
+#### GET /api/devices/sync (live status)
 
 ```json
 {
@@ -118,7 +139,8 @@ Example: MAC `AA:BB:CC:DD:EE:FF` → ID `a1b2c3d4`
       "children": [
         { "id": "0", "alias": "Outlet 1", "is_on": true },
         { "id": "1", "alias": "Outlet 2", "is_on": false }
-      ]
+      ],
+      "last_updated": "2024-01-15T10:30:00.000Z"
     }
   ]
 }

@@ -430,6 +430,9 @@ class DeviceManager:
                     for i, child in enumerate(device.children)
                 ] if is_strip else [],
             })
+            # Add last_updated from cache
+            if mac in self._cache and self._cache[mac].last_state:
+                result["last_updated"] = self._cache[mac].last_state.get("last_updated")
         else:
             result["status"] = "offline"
             if mac in self._cache:
@@ -604,6 +607,31 @@ class DeviceManager:
                 "online": False,
                 "error": "Device not found on network",
             }
+
+    def get_cached_status(self) -> list[dict[str, Any]]:
+        """
+        Get cached status of all devices (no device connection).
+
+        Returns lightweight status from cache only, suitable for polling.
+        """
+        results = []
+        for mac, info in self._whitelist.items():
+            result: dict[str, Any] = {
+                "id": info.id,
+                "name": info.name,
+                "status": "offline",
+            }
+            if mac in self._cache:
+                cached = self._cache[mac]
+                result["status"] = "online"
+                if cached.last_state:
+                    result.update({
+                        "is_on": cached.last_state.get("is_on"),
+                        "children": cached.last_state.get("children", []),
+                        "last_updated": cached.last_state.get("last_updated"),
+                    })
+            results.append(result)
+        return results
 
     def get_whitelist(self) -> list[DeviceInfo]:
         """Get all whitelisted devices."""
