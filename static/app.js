@@ -195,6 +195,48 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function updateDeviceCard(deviceId, result, childId) {
+    const card = document.querySelector(`[data-id="${deviceId}"]`);
+    if (!card) return;
+
+    if (childId !== null && result.children) {
+        // Strip device: update specific child outlet
+        const child = result.children.find(c => c.id === childId);
+        if (!child) return;
+
+        // Find the toggle button by matching the onclick pattern
+        const buttons = card.querySelectorAll('.toggle-switch');
+        for (const btn of buttons) {
+            const onclick = btn.getAttribute('onclick') || '';
+            if (onclick.includes(`'${childId}'`)) {
+                updateToggleButton(btn, deviceId, childId, child.is_on);
+                // Update parent outlet container
+                const outlet = btn.closest('.child-outlet');
+                if (outlet) {
+                    outlet.classList.toggle('is-on', child.is_on);
+                    const statusSpan = outlet.querySelector('.outlet-status');
+                    if (statusSpan) statusSpan.textContent = child.is_on ? 'ON' : 'OFF';
+                }
+                break;
+            }
+        }
+    } else {
+        // Single device: update main toggle
+        const btn = card.querySelector('.single-device-control .toggle-switch');
+        if (btn) {
+            updateToggleButton(btn, deviceId, null, result.is_on);
+        }
+    }
+}
+
+function updateToggleButton(btn, deviceId, childId, isOn) {
+    const action = isOn ? 'off' : 'on';
+    const childParam = childId !== null ? `'${childId}'` : 'null';
+    btn.classList.toggle('is-on', isOn);
+    btn.setAttribute('onclick', `handleToggle('${deviceId}', '${action}', ${childParam})`);
+    btn.setAttribute('title', isOn ? 'Turn off' : 'Turn on');
+}
+
 // === Event Handlers ===
 async function loadDevices() {
     const refreshBtn = document.getElementById('refresh-btn');
@@ -216,8 +258,8 @@ async function handleToggle(deviceId, action, childId) {
     if (card) card.classList.add('loading');
 
     try {
-        await controlDevice(deviceId, action, childId);
-        await loadDevices();
+        const result = await controlDevice(deviceId, action, childId);
+        updateDeviceCard(deviceId, result, childId);
     } catch (error) {
         console.error('Toggle error:', error);
         showAlert('Operation failed: ' + error.message);
