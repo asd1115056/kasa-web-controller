@@ -135,17 +135,6 @@ async def refresh_device(device_id: str, dm: DeviceManager = Depends(get_device_
         raise HTTPException(status_code=500, detail=f"Refresh failed: {str(e)}")
 
 
-@app.post("/api/devices/discover")
-async def discover_all(dm: DeviceManager = Depends(get_device_manager)):
-    """Force a full device discovery (use sparingly)."""
-    try:
-        await dm.discover_all()
-        return {"success": True}
-    except Exception as e:
-        logger.error(f"Discovery failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Discovery failed: {str(e)}")
-
-
 # === Static Files & Root ===
 app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "static"), name="static")
 

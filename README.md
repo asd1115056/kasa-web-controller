@@ -85,7 +85,6 @@ Credentials are required for newer Kasa devices that use TP-Link cloud authentic
 | GET | `/api/devices/{id}` | Get single device status |
 | PATCH | `/api/devices/{id}` | Control device (on/off) |
 | POST | `/api/devices/{id}/refresh` | Refresh single device (targeted discover) |
-| POST | `/api/devices/discover` | Force full device discovery |
 
 ### Device ID
 
