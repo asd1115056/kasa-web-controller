@@ -454,17 +454,17 @@ class DeviceManager:
         Returns list of device info dicts with status field.
         For offline devices, returns cached topology + last_state.
         """
-        results = []
 
-        for mac in self._whitelist:
+        async def fetch_one(mac: str) -> dict[str, Any]:
             try:
                 device = await self.get_device(mac)
-                results.append(self._build_device_response(mac, device))
+                return self._build_device_response(mac, device)
             except Exception as e:
                 logger.error(f"Error getting device {mac}: {e}")
-                results.append(self._build_device_response(mac, None, error=str(e)))
+                return self._build_device_response(mac, None, error=str(e))
 
-        return results
+        results = await asyncio.gather(*[fetch_one(mac) for mac in self._whitelist])
+        return list(results)
 
     async def get_device_status(self, device_id: str) -> dict[str, Any]:
         """
