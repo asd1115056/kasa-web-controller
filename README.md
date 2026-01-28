@@ -5,6 +5,7 @@ A web-based controller for TP-Link Kasa smart devices.
 ## Features
 
 - MAC-based device identification (stable across IP changes)
+- Per-device network and authentication configuration
 - Smart IP caching with automatic discovery on connection failure
 - Power strip support with individual outlet control
 - Offline device handling with cached topology
@@ -23,7 +24,6 @@ uv sync
 
 # Configure devices (see Configuration section)
 cp config/devices.example.json config/devices.json
-cp config/.env.example config/.env
 
 # Run the server
 uv run kasa-web
@@ -44,11 +44,15 @@ Copy `config/devices.example.json` to `config/devices.json` and add your devices
   "devices": [
     {
       "mac": "AA:BB:CC:DD:EE:FF",
-      "name": "Living Room Strip"
+      "name": "Living Room Strip",
+      "target": "192.168.1.255",
+      "username": "your@email.com",
+      "password": "your_password"
     },
     {
       "mac": "11:22:33:44:55:66",
-      "name": "Bedroom Plug"
+      "name": "Bedroom Plug (no auth needed)",
+      "target": "192.168.1.255"
     }
   ]
 }
@@ -58,22 +62,16 @@ Copy `config/devices.example.json` to `config/devices.json` and add your devices
 |-------|----------|-------------|
 | `mac` | Yes | Device MAC address (formats: `AA:BB:CC:DD:EE:FF`, `AA-BB-CC-DD-EE-FF`, `AABBCCDDEEFF`) |
 | `name` | No | Display name (defaults to device ID if omitted) |
+| `target` | Yes | Broadcast address for discovery (e.g., `192.168.1.255`) |
+| `username` | No | TP-Link account email (for newer devices requiring authentication) |
+| `password` | No | TP-Link account password |
+
+**Connection strategy:** The system first attempts to connect without credentials. If authentication is required, it retries with the provided credentials.
 
 **Finding your device MAC address:**
 ```bash
 uv run kasa discover
 ```
-
-### Credentials (`config/.env`)
-
-Copy `config/.env.example` to `config/.env` if your devices require cloud authentication.
-
-```env
-KASA_USERNAME=your@email.com
-KASA_PASSWORD=your_password
-```
-
-Credentials are required for newer Kasa devices that use TP-Link cloud authentication.
 
 ## API Reference
 
@@ -184,9 +182,7 @@ kasa-web-controller/
 │   └── device_manager.py # Device management logic
 ├── config/
 │   ├── devices.json      # Device whitelist (create from example)
-│   ├── devices.example.json
-│   ├── .env              # Credentials (create from example)
-│   └── .env.example
+│   └── devices.example.json
 ├── static/
 │   ├── index.html        # Web UI
 │   ├── app.js            # Frontend logic

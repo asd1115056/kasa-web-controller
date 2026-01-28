@@ -2,11 +2,15 @@
   "devices": [
     {
       "mac": "AA:BB:CC:DD:EE:FF",
-      "name": "Living Room Strip"
+      "name": "Living Room Strip",
+      "target": "192.168.1.255",
+      "username": "your@email.com",
+      "password": "your_password"
     },
     {
       "mac": "11:22:33:44:55:66",
-      "name": "Bedroom Plug"
+      "name": "Bedroom Plug (no auth needed)",
+      "target": "192.168.1.255"
     }
   ]
 }

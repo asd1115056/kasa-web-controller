@@ -14,14 +14,12 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
 from kasa import Credentials, Device, DeviceConfig, Discover
 from kasa.exceptions import AuthenticationError
 
@@ -93,7 +91,9 @@ class DeviceInfo:
 
     mac: str
     name: str
+    target: str  # Broadcast address for discovery (e.g., "192.168.1.255")
     id: str = ""
+    credentials: Credentials | None = None  # Optional TP-Link credentials
 
     def __post_init__(self):
         if not self.id:
@@ -115,45 +115,16 @@ class DeviceManager:
         self.config_dir = config_dir or DEFAULT_CONFIG_DIR
 
         # Paths
-        self._env_path = self.config_dir / ".env"
         self._whitelist_path = self.config_dir / "devices.json"
 
         # State
         self._whitelist: dict[str, DeviceInfo] = {}  # MAC -> DeviceInfo
         self._id_to_mac: dict[str, str] = {}  # ID -> MAC (reverse lookup)
         self._cache: dict[str, CacheEntry] = {}  # MAC -> CacheEntry (in-memory only)
-        self._credentials: Credentials | None = None
-
-        # Discovery settings (loaded from .env)
-        self._discovery_target: str | None = None  # Broadcast address (e.g., "192.168.1.255")
-        self._discovery_interface: str | None = None  # Interface name (e.g., "eth0")
 
         # Concurrency control
         self._device_locks: dict[str, asyncio.Lock] = {}  # MAC -> Lock
         self._last_command_time: dict[str, float] = {}  # MAC -> timestamp (rate limiting)
-
-    def _load_credentials(self) -> Credentials | None:
-        """Load credentials from config/.env if it exists."""
-        if not self._env_path.exists():
-            return None
-
-        load_dotenv(self._env_path)
-        username = os.getenv("KASA_USERNAME")
-        password = os.getenv("KASA_PASSWORD")
-
-        # Load discovery network settings
-        self._discovery_target = os.getenv("KASA_DISCOVERY_TARGET")  # e.g., "192.168.1.255"
-        self._discovery_interface = os.getenv("KASA_DISCOVERY_INTERFACE")  # e.g., "enx000000df1182"
-
-        if self._discovery_target:
-            logger.info(f"Discovery target: {self._discovery_target}")
-        if self._discovery_interface:
-            logger.info(f"Discovery interface: {self._discovery_interface}")
-
-        if not username or not password:
-            return None
-
-        return Credentials(username=username, password=password)
 
     def _load_whitelist(self) -> dict[str, DeviceInfo]:
         """Load device whitelist from config/devices.json."""
@@ -173,8 +144,27 @@ class DeviceManager:
                 device_id = mac_to_id(mac)
                 # name is optional, fallback to device ID
                 name = device.get("name") or device_id
-                whitelist[mac] = DeviceInfo(mac=mac, name=name, id=device_id)
+                # target is required
+                target = device["target"]
+                # credentials are optional
+                credentials = None
+                username = device.get("username")
+                password = device.get("password")
+                if username and password:
+                    credentials = Credentials(username=username, password=password)
+
+                whitelist[mac] = DeviceInfo(
+                    mac=mac,
+                    name=name,
+                    target=target,
+                    id=device_id,
+                    credentials=credentials,
+                )
                 self._id_to_mac[device_id] = mac
+                logger.debug(
+                    f"Loaded device: {name} ({mac}) target={target} "
+                    f"auth={'yes' if credentials else 'no'}"
+                )
 
             logger.info(f"Loaded {len(whitelist)} devices from whitelist")
             return whitelist
@@ -201,7 +191,6 @@ class DeviceManager:
 
     async def initialize(self) -> None:
         """Initialize the device manager (load configs, run initial discovery)."""
-        self._credentials = self._load_credentials()
         self._whitelist = self._load_whitelist()
 
         # Run initial discovery to populate cache
@@ -212,36 +201,69 @@ class DeviceManager:
         """Shutdown the device manager (clear state)."""
         self._cache.clear()
 
-    async def _connect_by_ip(self, ip: str) -> Device | None:
+    async def _connect_by_ip(
+        self, ip: str, credentials: Credentials | None = None
+    ) -> Device | None:
         """
-        Try to connect to a device by IP address with retry logic.
+        Try to connect to a device by IP address.
 
-        Uses Device.connect() instead of discover_single() to skip UDP discovery.
-        Retries on transient network failures.
+        Connection strategy (no-auth first):
+        1. Try without credentials
+        2. If fails and credentials provided, retry with credentials
+        3. If still fails, return None
         """
-        config = DeviceConfig(
+        # Step 1: Try without credentials
+        logger.debug(f"Trying to connect to {ip} without credentials...")
+        config_no_auth = DeviceConfig(
             host=ip,
-            credentials=self._credentials,
+            credentials=None,
             timeout=CONNECTION_TIMEOUT,
         )
 
         for attempt in range(CONNECTION_RETRIES):
             try:
-                device = await Device.connect(config=config)
+                device = await Device.connect(config=config_no_auth)
                 await device.update()
+                logger.debug(f"Connected to {ip} without credentials")
                 return device
+            except AuthenticationError:
+                # Device requires auth, break and try with credentials
+                logger.debug(f"Device at {ip} requires authentication")
+                break
             except Exception as e:
                 if attempt < CONNECTION_RETRIES - 1:
                     logger.debug(f"Connection to {ip} failed (attempt {attempt + 1}): {e}")
                     await asyncio.sleep(RETRY_DELAY)
                 else:
-                    logger.debug(f"Failed to connect to {ip} after {CONNECTION_RETRIES} attempts: {e}")
+                    logger.debug(f"Failed to connect to {ip} without auth: {e}")
+
+        # Step 2: Try with credentials if provided
+        if credentials:
+            logger.debug(f"Trying to connect to {ip} with credentials...")
+            config_with_auth = DeviceConfig(
+                host=ip,
+                credentials=credentials,
+                timeout=CONNECTION_TIMEOUT,
+            )
+
+            for attempt in range(CONNECTION_RETRIES):
+                try:
+                    device = await Device.connect(config=config_with_auth)
+                    await device.update()
+                    logger.debug(f"Connected to {ip} with credentials")
+                    return device
+                except Exception as e:
+                    if attempt < CONNECTION_RETRIES - 1:
+                        logger.debug(f"Connection to {ip} with auth failed (attempt {attempt + 1}): {e}")
+                        await asyncio.sleep(RETRY_DELAY)
+                    else:
+                        logger.debug(f"Failed to connect to {ip} with auth: {e}")
 
         return None
 
-    async def _discover_device_ip(self, target_mac: str) -> str | None:
+    async def _discover_device_ip(self, device_info: DeviceInfo) -> str | None:
         """Discover a device's IP by its MAC address via network scan."""
-        target_mac = normalize_mac(target_mac)
+        target_mac = device_info.mac
         found_ip: str | None = None
 
         async def on_discovered(device: Device) -> None:
@@ -255,72 +277,80 @@ class DeviceManager:
                 except ValueError:
                     pass
 
-        discover_kwargs: dict[str, Any] = {
-            "on_discovered": on_discovered,
-            "credentials": self._credentials,
-        }
-        if self._discovery_target:
-            discover_kwargs["target"] = self._discovery_target
-        if self._discovery_interface:
-            discover_kwargs["interface"] = self._discovery_interface
-
-        await Discover.discover(**discover_kwargs)
+        # Use device-specific target for discovery
+        await Discover.discover(
+            target=device_info.target,
+            on_discovered=on_discovered,
+        )
 
         return found_ip
 
     async def discover_all(self) -> None:
         """Discover all whitelisted devices and update cache."""
         logger.info("Starting full device discovery...")
+
+        # Group devices by target to minimize discovery calls
+        targets: dict[str, list[DeviceInfo]] = {}
+        for info in self._whitelist.values():
+            if info.target not in targets:
+                targets[info.target] = []
+            targets[info.target].append(info)
+
         discovered_macs: set[str] = set()
 
-        async def on_discovered(device: Device) -> None:
-            device_mac = getattr(device, "mac", None)
-            if device_mac:
-                try:
-                    mac = normalize_mac(device_mac)
-                    discovered_macs.add(mac)
+        # Discover each target network
+        for target, devices in targets.items():
+            logger.info(f"Discovering on target {target}...")
+            device_macs = {d.mac for d in devices}
 
-                    # Update cache if device is in whitelist
-                    if mac in self._whitelist:
-                        try:
-                            await device.update()
-                            self._update_cache_from_device(mac, device)
-                            logger.info(
-                                f"Found whitelisted device: {device.alias or self._whitelist[mac].name} "
-                                f"({device.model}) at {device.host}"
-                            )
-                        except AuthenticationError:
-                            # Device requires different credentials - cache IP but skip state
-                            logger.warning(
-                                f"Authentication failed for device at {device.host} ({mac}). "
-                                "Check KASA_USERNAME and KASA_PASSWORD in config/.env"
-                            )
-                            # Still cache the IP so we know where the device is
-                            self._cache[mac] = CacheEntry(
-                                ip=device.host,
-                                last_seen=datetime.now(),
-                                alias=self._whitelist[mac].name,
-                            )
-                        except Exception as e:
-                            logger.warning(
-                                f"Failed to update device at {device.host} ({mac}): {e}"
-                            )
-                except ValueError:
-                    pass
+            async def on_discovered(device: Device) -> None:
+                device_mac = getattr(device, "mac", None)
+                if device_mac:
+                    try:
+                        mac = normalize_mac(device_mac)
+                        if mac not in device_macs:
+                            return  # Not a device we're looking for on this target
 
-        discover_kwargs: dict[str, Any] = {
-            "on_discovered": on_discovered,
-            "credentials": self._credentials,
-        }
-        if self._discovery_target:
-            discover_kwargs["target"] = self._discovery_target
-        if self._discovery_interface:
-            discover_kwargs["interface"] = self._discovery_interface
+                        discovered_macs.add(mac)
+                        device_info = self._whitelist[mac]
 
-        await Discover.discover(**discover_kwargs)
+                        # Cache the IP first
+                        self._cache[mac] = CacheEntry(
+                            ip=device.host,
+                            last_seen=datetime.now(),
+                            alias=device_info.name,
+                        )
+                        logger.info(
+                            f"Found device: {device_info.name} at {device.host}"
+                        )
+                    except ValueError:
+                        pass
+
+            await Discover.discover(
+                target=target,
+                on_discovered=on_discovered,
+            )
+
+        # Now connect to each discovered device to get full state
+        for mac in discovered_macs:
+            device_info = self._whitelist[mac]
+            cached = self._cache.get(mac)
+            if not cached:
+                continue
+
+            device = await self._connect_by_ip(cached.ip, device_info.credentials)
+            if device:
+                self._update_cache_from_device(mac, device)
+                logger.info(
+                    f"Connected to {device_info.name} ({device.model}) at {device.host}"
+                )
+            else:
+                logger.warning(
+                    f"Found {device_info.name} at {cached.ip} but connection failed"
+                )
 
         # Log summary
-        found = len(discovered_macs & set(self._whitelist.keys()))
+        found = len(discovered_macs)
         total = len(self._whitelist)
         logger.info(f"Discovery complete: {found}/{total} whitelisted devices found")
 
@@ -380,6 +410,8 @@ class DeviceManager:
             logger.warning(f"Device {mac} not in whitelist")
             return None
 
+        device_info = self._whitelist[mac]
+
         # Rate limit per device
         await self._wait_for_rate_limit(mac)
 
@@ -388,7 +420,7 @@ class DeviceManager:
             cached = self._cache[mac]
             logger.debug(f"Trying cached IP {cached.ip} for {mac}")
 
-            device = await self._connect_by_ip(cached.ip)
+            device = await self._connect_by_ip(cached.ip, device_info.credentials)
             if device:
                 # Verify MAC matches
                 device_mac = getattr(device, "mac", None)
@@ -402,14 +434,14 @@ class DeviceManager:
 
         # Cache miss or connection failed - discover
         logger.info(f"Discovering IP for {mac}...")
-        ip = await self._discover_device_ip(mac)
+        ip = await self._discover_device_ip(device_info)
 
         if not ip:
             logger.warning(f"Device {mac} not found on network")
             return None
 
         # Connect to discovered IP
-        device = await self._connect_by_ip(ip)
+        device = await self._connect_by_ip(ip, device_info.credentials)
         if device:
             self._update_cache_from_device(mac, device)
             return device

@@ -9,7 +9,5 @@ wheels/
 # Virtual environments
 .venv
 
-# Config with credentials
-config/.env
+# Config
 config/devices.json
-config/cache.json
