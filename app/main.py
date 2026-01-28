@@ -5,6 +5,7 @@ Provides REST API for controlling TP-Link Kasa smart devices.
 Uses ID-based device identification with smart IP caching.
 """
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -26,6 +27,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Background sync interval (seconds)
+SYNC_INTERVAL = 30
+
 # Global device manager instance
 device_manager: DeviceManager | None = None
 
@@ -44,6 +48,13 @@ def get_device_manager() -> DeviceManager:
 
 
 # === Application Lifecycle ===
+async def _periodic_sync_task(dm: DeviceManager) -> None:
+    """Background task to periodically sync device states."""
+    while True:
+        await asyncio.sleep(SYNC_INTERVAL)
+        await dm.sync_all_states()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifecycle - initialize and shutdown DeviceManager."""
@@ -53,7 +64,17 @@ async def lifespan(app: FastAPI):
     device_manager = DeviceManager()
     await device_manager.initialize()
 
+    # Start background sync task
+    sync_task = asyncio.create_task(_periodic_sync_task(device_manager))
+
     yield
+
+    # Cancel background task
+    sync_task.cancel()
+    try:
+        await sync_task
+    except asyncio.CancelledError:
+        pass
 
     logger.info("Shutting down Kasa Web Controller...")
     if device_manager:

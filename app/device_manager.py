@@ -530,6 +530,15 @@ class DeviceManager:
         results = await asyncio.gather(*[fetch_one(mac) for mac in self._whitelist])
         return list(results)
 
+    async def sync_all_states(self) -> None:
+        """Sync all device states to cache (background task)."""
+        try:
+            devices = await self.get_all_devices()
+            online = sum(1 for d in devices if d.get("status") != "offline")
+            logger.debug(f"Background sync completed: {online}/{len(devices)} devices online")
+        except Exception as e:
+            logger.warning(f"Background sync failed: {e}")
+
     async def get_device_status(self, device_id: str) -> dict[str, Any]:
         """
         Get status of a single device.
