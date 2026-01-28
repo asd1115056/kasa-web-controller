@@ -203,15 +203,20 @@ class DeviceManager:
 
     async def _connect_by_ip(
         self, ip: str, credentials: Credentials | None = None
-    ) -> Device | None:
+    ) -> tuple[Device | None, str | None]:
         """
         Try to connect to a device by IP address.
 
         Connection strategy (no-auth first):
         1. Try without credentials
         2. If fails and credentials provided, retry with credentials
-        3. If still fails, return None
+        3. If still fails, return (None, error_reason)
+
+        Returns:
+            Tuple of (device, error_reason). If successful, error_reason is None.
         """
+        last_error: str | None = None
+
         # Step 1: Try without credentials
         logger.debug(f"Trying to connect to {ip} without credentials...")
         config_no_auth = DeviceConfig(
@@ -225,17 +230,17 @@ class DeviceManager:
                 device = await Device.connect(config=config_no_auth)
                 await device.update()
                 logger.debug(f"Connected to {ip} without credentials")
-                return device
-            except AuthenticationError:
+                return device, None
+            except AuthenticationError as e:
                 # Device requires auth, break and try with credentials
                 logger.debug(f"Device at {ip} requires authentication")
+                last_error = f"{type(e).__name__}: {e}"
                 break
             except Exception as e:
+                last_error = f"{type(e).__name__}: {e}"
                 if attempt < CONNECTION_RETRIES - 1:
                     logger.debug(f"Connection to {ip} failed (attempt {attempt + 1}): {e}")
                     await asyncio.sleep(RETRY_DELAY)
-                else:
-                    logger.debug(f"Failed to connect to {ip} without auth: {e}")
 
         # Step 2: Try with credentials if provided
         if credentials:
@@ -251,15 +256,14 @@ class DeviceManager:
                     device = await Device.connect(config=config_with_auth)
                     await device.update()
                     logger.debug(f"Connected to {ip} with credentials")
-                    return device
+                    return device, None
                 except Exception as e:
+                    last_error = f"{type(e).__name__}: {e}"
                     if attempt < CONNECTION_RETRIES - 1:
                         logger.debug(f"Connection to {ip} with auth failed (attempt {attempt + 1}): {e}")
                         await asyncio.sleep(RETRY_DELAY)
-                    else:
-                        logger.debug(f"Failed to connect to {ip} with auth: {e}")
 
-        return None
+        return None, last_error
 
     async def _discover_device_ip(self, device_info: DeviceInfo) -> str | None:
         """Discover a device's IP by its MAC address via network scan."""
@@ -338,7 +342,7 @@ class DeviceManager:
             if not cached:
                 continue
 
-            device = await self._connect_by_ip(cached.ip, device_info.credentials)
+            device, error = await self._connect_by_ip(cached.ip, device_info.credentials)
             if device:
                 self._update_cache_from_device(mac, device)
                 logger.info(
@@ -346,7 +350,7 @@ class DeviceManager:
                 )
             else:
                 logger.warning(
-                    f"Found {device_info.name} at {cached.ip} but connection failed"
+                    f"Found {device_info.name} at {cached.ip} but connection failed: {error}"
                 )
 
         # Log summary
@@ -420,7 +424,7 @@ class DeviceManager:
             cached = self._cache[mac]
             logger.debug(f"Trying cached IP {cached.ip} for {mac}")
 
-            device = await self._connect_by_ip(cached.ip, device_info.credentials)
+            device, error = await self._connect_by_ip(cached.ip, device_info.credentials)
             if device:
                 # Verify MAC matches
                 device_mac = getattr(device, "mac", None)
@@ -441,12 +445,12 @@ class DeviceManager:
             return None
 
         # Connect to discovered IP
-        device = await self._connect_by_ip(ip, device_info.credentials)
+        device, error = await self._connect_by_ip(ip, device_info.credentials)
         if device:
             self._update_cache_from_device(mac, device)
             return device
 
-        logger.warning(f"Device {mac} found at {ip} but connection failed")
+        logger.warning(f"Device {mac} found at {ip} but connection failed: {error}")
         return None
 
     def _build_device_response(
