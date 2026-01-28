@@ -124,6 +124,10 @@ class DeviceManager:
         self._cache: dict[str, CacheEntry] = {}  # MAC -> CacheEntry (in-memory only)
         self._credentials: Credentials | None = None
 
+        # Discovery settings (loaded from .env)
+        self._discovery_target: str | None = None  # Broadcast address (e.g., "192.168.1.255")
+        self._discovery_interface: str | None = None  # Interface name (e.g., "eth0")
+
         # Concurrency control
         self._device_locks: dict[str, asyncio.Lock] = {}  # MAC -> Lock
         self._last_command_time: dict[str, float] = {}  # MAC -> timestamp (rate limiting)
@@ -136,6 +140,15 @@ class DeviceManager:
         load_dotenv(self._env_path)
         username = os.getenv("KASA_USERNAME")
         password = os.getenv("KASA_PASSWORD")
+
+        # Load discovery network settings
+        self._discovery_target = os.getenv("KASA_DISCOVERY_TARGET")  # e.g., "192.168.1.255"
+        self._discovery_interface = os.getenv("KASA_DISCOVERY_INTERFACE")  # e.g., "enx000000df1182"
+
+        if self._discovery_target:
+            logger.info(f"Discovery target: {self._discovery_target}")
+        if self._discovery_interface:
+            logger.info(f"Discovery interface: {self._discovery_interface}")
 
         if not username or not password:
             return None
@@ -242,10 +255,16 @@ class DeviceManager:
                 except ValueError:
                     pass
 
-        await Discover.discover(
-            on_discovered=on_discovered,
-            credentials=self._credentials,
-        )
+        discover_kwargs: dict[str, Any] = {
+            "on_discovered": on_discovered,
+            "credentials": self._credentials,
+        }
+        if self._discovery_target:
+            discover_kwargs["target"] = self._discovery_target
+        if self._discovery_interface:
+            discover_kwargs["interface"] = self._discovery_interface
+
+        await Discover.discover(**discover_kwargs)
 
         return found_ip
 
@@ -289,10 +308,16 @@ class DeviceManager:
                 except ValueError:
                     pass
 
-        await Discover.discover(
-            on_discovered=on_discovered,
-            credentials=self._credentials,
-        )
+        discover_kwargs: dict[str, Any] = {
+            "on_discovered": on_discovered,
+            "credentials": self._credentials,
+        }
+        if self._discovery_target:
+            discover_kwargs["target"] = self._discovery_target
+        if self._discovery_interface:
+            discover_kwargs["interface"] = self._discovery_interface
+
+        await Discover.discover(**discover_kwargs)
 
         # Log summary
         found = len(discovered_macs & set(self._whitelist.keys()))
