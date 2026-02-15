@@ -10,8 +10,8 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -143,6 +143,16 @@ async def refresh_device(
     except Exception as e:
         logger.error(f"Failed to refresh device {device_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Refresh failed: {str(e)}")
+
+
+# === Legacy API Redirects ===
+@app.api_route("/api/{path:path}", methods=["GET", "PATCH", "POST"])
+async def legacy_api_redirect(path: str, request: Request):
+    """Redirect old /api/* requests to /api/v1/* for backwards compatibility."""
+    url = f"/api/v1/{path}"
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    return RedirectResponse(url=url, status_code=307)
 
 
 # === Static Files & Root ===
