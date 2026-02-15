@@ -3,9 +3,12 @@ body {
     background-color: #f5f5f5;
 }
 
+[data-bs-theme="dark"] body {
+    background-color: #212529;
+}
+
 /* === Device Cards === */
 .device-card {
-    margin-bottom: 1rem;
     border: none;
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -15,6 +18,14 @@ body {
 
 .device-card:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+[data-bs-theme="dark"] .device-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-bs-theme="dark"] .device-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .device-card .card-header {
@@ -32,14 +43,17 @@ body {
     color: white;
 }
 
-.device-card.state-connecting .card-header {
-    background: linear-gradient(135deg, #fd7e14, #e8590c);
-    color: white;
-}
-
 .device-card.state-offline .card-header {
     background: linear-gradient(135deg, #adb5bd, #868e96);
     color: white;
+}
+
+[data-bs-theme="dark"] .device-card.state-online .card-header {
+    background: linear-gradient(135deg, #198754, #146c43);
+}
+
+[data-bs-theme="dark"] .device-card.state-offline .card-header {
+    background: linear-gradient(135deg, #6c757d, #495057);
 }
 
 /* === Status Badge === */
@@ -78,6 +92,22 @@ body {
     background: #157347;
 }
 
+[data-bs-theme="dark"] .toggle-switch {
+    background: #495057;
+}
+
+[data-bs-theme="dark"] .toggle-switch:hover {
+    background: #5a6268;
+}
+
+[data-bs-theme="dark"] .toggle-switch.is-on {
+    background: #198754;
+}
+
+[data-bs-theme="dark"] .toggle-switch.is-on:hover {
+    background: #20a060;
+}
+
 .toggle-switch::after {
     content: '';
     position: absolute;
@@ -110,6 +140,10 @@ body {
     background: #f8f9fa;
 }
 
+[data-bs-theme="dark"] .single-device-control {
+    background: #2b3035;
+}
+
 /* === Child Outlets (Power Strip) === */
 .child-outlet {
     display: flex;
@@ -133,9 +167,26 @@ body {
     background: linear-gradient(90deg, rgba(25, 135, 84, 0.1), transparent);
 }
 
+[data-bs-theme="dark"] .child-outlet {
+    background: #2b3035;
+    border-bottom-color: #373b3e;
+}
+
+[data-bs-theme="dark"] .child-outlet:hover {
+    background: #323639;
+}
+
+[data-bs-theme="dark"] .child-outlet.is-on {
+    background: linear-gradient(90deg, rgba(25, 135, 84, 0.15), transparent);
+}
+
 .outlet-name {
     font-weight: 500;
     color: #212529;
+}
+
+[data-bs-theme="dark"] .outlet-name {
+    color: #e0e0e0;
 }
 
 .outlet-status {
@@ -148,14 +199,6 @@ body {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-}
-
-/* === Offline State === */
-.offline-message {
-    padding: 1.5rem;
-    text-align: center;
-    color: #6c757d;
-    background: #f8f9fa;
 }
 
 /* === Loading State === */
@@ -186,7 +229,7 @@ body {
     line-height: 1;
 }
 
-#refresh-btn.spinning .refresh-icon {
+.refresh-device-btn.spinning {
     animation: spin 0.8s linear infinite;
 }
 
@@ -195,25 +238,36 @@ body {
     to { transform: rotate(360deg); }
 }
 
-/* === Header === */
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-}
-
-.page-header h1 {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 600;
-}
-
 /* === Device Info === */
 .device-model {
     font-size: 0.8rem;
     opacity: 0.8;
     margin-top: 0.25rem;
+}
+
+/* === Theme Toggle === */
+#theme-toggle {
+    font-size: 1.1rem;
+    line-height: 1;
+    padding: 0.35rem 0.6rem;
+}
+
+/* === Toast === */
+#toast-container {
+    z-index: 1080;
+}
+
+#toast-container .toast {
+    min-width: 280px;
+    font-size: 0.95rem;
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+#toast-container .toast .toast-body {
+    padding: 0.75rem 1rem;
+    font-weight: 500;
 }
 
 /* === Responsive === */

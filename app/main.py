@@ -1,138 +1,112 @@
 """
 Kasa Web Controller - FastAPI Backend
 
-Provides REST API for controlling TP-Link Kasa smart devices.
-Uses ID-based device identification with smart IP caching.
+Provides REST API (v1) for controlling TP-Link Kasa smart devices.
+Uses per-device command queue with short-term persistent connections.
 """
 
-import asyncio
 import logging
 from contextlib import asynccontextmanager
+from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from .device_manager import DeviceManager, DeviceOfflineError, DeviceOperationError
+from .device_manager import DeviceManager
+from .models import DeviceOfflineError, DeviceOperationError
 
-# Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
-# Background sync interval (seconds)
-SYNC_INTERVAL = 30
-
-# Global device manager instance
 device_manager: DeviceManager | None = None
 
 
 # === Pydantic Models ===
 class ControlRequest(BaseModel):
     action: str  # "on" or "off"
-    child_id: str | None = None  # For power strips
+    child_id: str | None = None
 
 
+# === Dependency ===
 def get_device_manager() -> DeviceManager:
-    """Dependency to get the device manager instance."""
     if not device_manager:
         raise HTTPException(status_code=503, detail="Device manager not initialized")
     return device_manager
 
 
-# === Application Lifecycle ===
-async def _periodic_sync_task(dm: DeviceManager) -> None:
-    """Background task to periodically sync device states."""
-    while True:
-        await asyncio.sleep(SYNC_INTERVAL)
-        await dm.sync_all_states()
+def _state_to_dict(state) -> dict:
+    """Convert DeviceState dataclass to dict for JSON response."""
+    d = asdict(state)
+    # Remove None children to keep response clean
+    if d.get("children") is None:
+        d.pop("children", None)
+    return d
 
 
+# === Lifecycle ===
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifecycle - initialize and shutdown DeviceManager."""
     global device_manager
 
     logger.info("Starting Kasa Web Controller...")
     device_manager = DeviceManager()
     await device_manager.initialize()
 
-    # Start background sync task
-    sync_task = asyncio.create_task(_periodic_sync_task(device_manager))
-
     yield
-
-    # Cancel background task
-    sync_task.cancel()
-    try:
-        await sync_task
-    except asyncio.CancelledError:
-        pass
 
     logger.info("Shutting down Kasa Web Controller...")
     if device_manager:
         await device_manager.shutdown()
 
 
-# === FastAPI App ===
+# === App ===
 app = FastAPI(
     title="Kasa Web Controller",
-    description="Control TP-Link Kasa smart devices via ID-based identification",
+    description="Control TP-Link Kasa smart devices via command queue",
     lifespan=lifespan,
 )
 
 
-# === API Endpoints ===
-@app.get("/api/devices")
+# === API v1 Endpoints ===
+@app.get("/api/v1/devices")
 def list_devices(dm: DeviceManager = Depends(get_device_manager)):
-    """Get cached status of all devices (lightweight, for polling)."""
-    return {"devices": dm.get_cached_status()}
+    """Get cached status of all devices (zero I/O)."""
+    states = dm.get_all_states()
+    return {"devices": [_state_to_dict(s) for s in states]}
 
 
-@app.get("/api/devices/sync")
-async def sync_devices(dm: DeviceManager = Depends(get_device_manager)):
-    """Sync all devices - connects to each device to get live status."""
+@app.get("/api/v1/devices/{device_id}")
+def get_device(device_id: str, dm: DeviceManager = Depends(get_device_manager)):
+    """Get a single device's cached status."""
     try:
-        devices = await dm.get_all_devices()
-        return {"devices": devices}
-    except Exception as e:
-        logger.error(f"Failed to sync devices: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to sync devices: {str(e)}")
-
-
-@app.get("/api/devices/{device_id}")
-async def get_device(device_id: str, dm: DeviceManager = Depends(get_device_manager)):
-    """Get a single device's status."""
-    try:
-        return await dm.get_device_status(device_id)
+        state = dm.get_device_state(device_id)
+        return _state_to_dict(state)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error(f"Failed to get device {device_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get device: {str(e)}")
 
 
-@app.patch("/api/devices/{device_id}")
+@app.patch("/api/v1/devices/{device_id}")
 async def control_device(
     device_id: str,
     request: ControlRequest,
     dm: DeviceManager = Depends(get_device_manager),
 ):
-    """Control a device (on/off)."""
+    """Control a device (on/off). Blocks until operation completes."""
     try:
-        result = await dm.control_device(
+        state = await dm.control_device(
             device_id=device_id,
             action=request.action,
             child_id=request.child_id,
         )
-        return result
+        return _state_to_dict(state)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except DeviceOfflineError as e:
@@ -141,6 +115,11 @@ async def control_device(
             detail={"error": "offline", "message": str(e)},
         )
     except DeviceOperationError as e:
+        if "timed out" in str(e).lower():
+            raise HTTPException(
+                status_code=504,
+                detail={"error": "timeout", "message": str(e)},
+            )
         raise HTTPException(
             status_code=502,
             detail={"error": "operation_failed", "message": str(e)},
@@ -150,16 +129,30 @@ async def control_device(
         raise HTTPException(status_code=500, detail=f"Control failed: {str(e)}")
 
 
-@app.post("/api/devices/{device_id}/refresh")
-async def refresh_device(device_id: str, dm: DeviceManager = Depends(get_device_manager)):
-    """Refresh a single device (targeted discover)."""
+@app.post("/api/v1/devices/{device_id}/refresh")
+async def refresh_device(
+    device_id: str, dm: DeviceManager = Depends(get_device_manager)
+):
+    """Refresh a single device (discover + connect). For offline recovery."""
     try:
-        return await dm.refresh_device(device_id)
+        state = await dm.refresh_device(device_id)
+        code = 200 if state.status == "online" else 503
+        return JSONResponse(content=_state_to_dict(state), status_code=code)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to refresh device {device_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Refresh failed: {str(e)}")
+
+
+# === Legacy API Redirects ===
+@app.api_route("/api/{path:path}", methods=["GET", "PATCH", "POST"])
+async def legacy_api_redirect(path: str, request: Request):
+    """Redirect old /api/* requests to /api/v1/* for backwards compatibility."""
+    url = f"/api/v1/{path}"
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    return RedirectResponse(url=url, status_code=307)
 
 
 # === Static Files & Root ===
@@ -168,13 +161,11 @@ app.mount("/static", StaticFiles(directory=PROJECT_ROOT / "static"), name="stati
 
 @app.get("/")
 async def root():
-    """Serve the main HTML page."""
     return FileResponse(PROJECT_ROOT / "static/index.html")
 
 
 # === Entry Point ===
 def run():
-    """Entry point for the application."""
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
 

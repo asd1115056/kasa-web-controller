@@ -6,17 +6,23 @@
     <title>Kasa Device Controller</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
+    <script>
+        // Apply theme before render to prevent flash: localStorage > system preference
+        const saved = localStorage.getItem('theme');
+        const system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-bs-theme', saved || system);
+    </script>
 </head>
 <body>
     <div class="container py-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1 class="h3 mb-0">Kasa Device Controller</h1>
-            <button id="refresh-btn" class="btn btn-outline-primary btn-sm" onclick="loadDevices()">
-                <span class="refresh-icon">&#x21bb;</span> Refresh
+            <button id="theme-toggle" class="btn btn-outline-secondary btn-sm"
+                    onclick="toggleTheme()" title="Toggle theme">
+                <span id="theme-icon"></span>
             </button>
         </div>
 
-        <div id="alert-container"></div>
         <div id="devices-container">
             <div class="text-center py-5">
                 <div class="spinner-border text-primary" role="status">
@@ -26,6 +32,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/app.js"></script>
