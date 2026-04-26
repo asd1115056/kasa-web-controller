@@ -54,7 +54,7 @@ async function fetchDevices() {
 }
 
 async function controlDevice(deviceId, action, childId = null) {
-    const body = { action };
+    const body = { is_on: action === 'on' };
     if (childId !== null) body.child_id = childId;
 
     const response = await fetch(`${API_BASE}/devices/${encodeURIComponent(deviceId)}`, {

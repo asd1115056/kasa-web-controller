@@ -158,14 +158,14 @@ Control a device. Blocks until the operation completes (or fails).
 Request:
 ```json
 {
-  "action": "on",
+  "is_on": true,
   "child_id": "optional_outlet_id"
 }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `action` | Yes | `"on"` or `"off"` |
+| `is_on` | Yes | `true` to turn on, `false` to turn off |
 | `child_id` | No | Outlet ID for power strips |
 
 Response (200): Full `DeviceState` with updated values.
