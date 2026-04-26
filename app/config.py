@@ -43,7 +43,7 @@ class ConfigManager:
                 mac = normalize_mac(device["mac"])
                 device_id = mac_to_id(mac)
                 name = device.get("name") or device_id
-                target = device["target"]
+                broadcast = device["broadcast"]
 
                 credentials = None
                 username = device.get("username")
@@ -54,13 +54,13 @@ class ConfigManager:
                 whitelist[mac] = DeviceInfo(
                     mac=mac,
                     name=name,
-                    target=target,
+                    broadcast=broadcast,
                     id=device_id,
                     credentials=credentials,
                 )
                 id_to_mac[device_id] = mac
                 logger.debug(
-                    f"Loaded device: {name} ({mac}) target={target} "
+                    f"Loaded device: {name} ({mac}) broadcast={broadcast} "
                     f"auth={'yes' if credentials else 'no'}"
                 )
 

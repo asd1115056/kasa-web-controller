@@ -46,14 +46,14 @@ Copy `config/devices.example.json` to `config/devices.json` and add your devices
     {
       "mac": "AA:BB:CC:DD:EE:FF",
       "name": "Living Room Strip",
-      "target": "192.168.1.255",
+      "broadcast": "192.168.1.255",
       "username": "your@email.com",
       "password": "your_password"
     },
     {
       "mac": "11:22:33:44:55:66",
       "name": "Bedroom Plug (no auth needed)",
-      "target": "192.168.1.255"
+      "broadcast": "192.168.1.255"
     }
   ]
 }
@@ -63,7 +63,7 @@ Copy `config/devices.example.json` to `config/devices.json` and add your devices
 |-------|----------|-------------|
 | `mac` | Yes | Device MAC address (formats: `AA:BB:CC:DD:EE:FF`, `AA-BB-CC-DD-EE-FF`, `AABBCCDDEEFF`) |
 | `name` | No | Display name (defaults to device ID if omitted) |
-| `target` | Yes | Broadcast address for discovery (e.g., `192.168.1.255`) |
+| `broadcast` | Yes | Broadcast address for discovery (e.g., `192.168.1.255`) |
 | `username` | No | TP-Link account email (for newer devices requiring authentication) |
 | `password` | No | TP-Link account password |
 

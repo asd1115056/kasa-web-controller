@@ -45,7 +45,7 @@ class DeviceInfo:
 
     mac: str
     name: str
-    target: str  # Broadcast address for discovery (e.g., "192.168.1.255")
+    broadcast: str  # Broadcast address for discovery (e.g., "192.168.1.255")
     id: str = ""
     credentials: Credentials | None = None
 

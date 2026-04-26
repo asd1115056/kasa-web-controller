@@ -105,7 +105,7 @@ async def discover_device_ip(device_info: DeviceInfo) -> str | None:
                 pass
 
     await Discover.discover(
-        target=device_info.target,
+        target=device_info.broadcast,
         on_discovered=on_discovered,
     )
 
@@ -121,15 +121,15 @@ async def discover_all(
     """
     logger.info("Starting full device discovery...")
 
-    # Group devices by target
+    # Group devices by broadcast address
     targets: dict[str, list[DeviceInfo]] = {}
     for info in whitelist.values():
-        targets.setdefault(info.target, []).append(info)
+        targets.setdefault(info.broadcast, []).append(info)
 
     result: dict[str, str] = {}
 
     for target, devices in targets.items():
-        logger.info(f"Discovering on target {target}...")
+        logger.info(f"Discovering on {target}...")
         device_macs = {d.mac for d in devices}
 
         async def on_discovered(device: Device) -> None:
