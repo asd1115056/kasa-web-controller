@@ -138,8 +138,12 @@ class DeviceManager:
     # === State queries (zero I/O, from cache) ===
 
     def get_all_states(self) -> list[DeviceState]:
-        """Get all device states from cache."""
-        return list(self._states.values())
+        """Get all device states from cache, in config file order."""
+        return [
+            self._states[info.id]
+            for info in self._config.whitelist.values()
+            if info.id in self._states
+        ]
 
     def get_device_state(self, device_id: str) -> DeviceState:
         """Get a single device state from cache."""
