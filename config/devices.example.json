@@ -15,6 +15,15 @@
       "mac": "11:22:33:44:55:66",
       "broadcast": "192.168.1.255",
       "group": "Bedroom"
+    },
+    {
+      "type": "miio",
+      "name": "Gosund WP12",
+      "mac": "AA:BB:CC:DD:EE:01",
+      "broadcast": "192.168.1.255",
+      "token": "00000000000000000000000000000000",
+      "miio_id": "YOUR_MIIO_DEVICE_ID",
+      "group": "Office"
     }
   ]
 }
