@@ -10,7 +10,8 @@ from functools import partial
 
 from miio.protocol import Message
 
-from ..core.models import ChildState, DeviceOfflineError, DeviceState, DeviceStatus, make_offline_state
+from ..core.exceptions import DeviceOfflineError
+from ..core.models import ChildState, DeviceState, DeviceStatus, make_offline_state
 from .config import MiioDeviceConfig
 
 logger = logging.getLogger(__name__)

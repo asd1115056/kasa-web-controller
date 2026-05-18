@@ -2,14 +2,9 @@
 
 import logging
 
-from ..core.models import (
-    BackendPolicy,
-    Command,
-    DeviceBackend,
-    DeviceOfflineError,
-    DeviceState,
-    DeviceStatus,
-)
+from ..core.backend import BackendPolicy, Command, DeviceBackend
+from ..core.exceptions import DeviceOfflineError
+from ..core.models import DeviceState, DeviceStatus
 from .config import MiioDeviceConfig
 from . import connection
 
