@@ -450,11 +450,30 @@ function setServerOffline(offline) {
 function detectStatusChanges(newDevices) {
     for (const device of newDevices) {
         const prev = currentDevices[device.id]
-        if (!prev || prev.status === device.status) continue
-        if (device.status === 'online') {
-            showToast(`${device.name}: back online`, 'success')
-        } else {
-            showToast(`${device.name}: went offline`, 'warning')
+        if (!prev) continue
+
+        if (prev.status !== device.status) {
+            if (device.status === 'online') {
+                showToast(`${device.name}: back online`, 'success')
+            } else {
+                showToast(`${device.name}: went offline`, 'warning')
+            }
+            continue
+        }
+
+        if (device.status !== 'online') continue
+
+        if (device.children?.length) {
+            for (const child of device.children) {
+                const prevChild = prev.children?.find(c => c.id === child.id)
+                if (prevChild && prevChild.is_on !== child.is_on) {
+                    const action = child.is_on ? 'on' : 'off'
+                    showToast(`${device.name} / ${child.alias}: turned ${action}`, 'info')
+                }
+            }
+        } else if (prev.is_on !== undefined && prev.is_on !== device.is_on) {
+            const action = device.is_on ? 'on' : 'off'
+            showToast(`${device.name}: turned ${action}`, 'info')
         }
     }
 }
