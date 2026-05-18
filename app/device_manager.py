@@ -8,14 +8,8 @@ from typing import Literal
 
 from .command_queue import CommandQueue, make_command
 from .core.config import ConfigManager
-from .core.models import (
-    Device,
-    DeviceOfflineError,
-    DeviceOperationError,
-    DeviceState,
-    DeviceStatus,
-    make_offline_state,
-)
+from .core.exceptions import DeviceOfflineError, DeviceOperationError
+from .core.models import Device, DeviceState, DeviceStatus, make_offline_state
 from .core.registry import PROTOCOLS
 
 logger = logging.getLogger(__name__)

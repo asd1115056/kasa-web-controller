@@ -1,20 +1,19 @@
 """SmartPlug Hub - FastAPI backend with per-device command queue and multi-protocol support."""
 
 import asyncio
-import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
 from .device_manager import DeviceManager
-from .core.models import Device, DeviceOfflineError, DeviceOperationError, DeviceStatus
+from .core.exceptions import DeviceOfflineError, DeviceOperationError
+from .core.models import DeviceStatus
+from .schemas import ControlRequest, DeviceListResponse, DeviceResponse, ErrorDetail
 
 PROJECT_ROOT = Path(__file__).parent.parent
 
@@ -27,33 +26,8 @@ logger = logging.getLogger(__name__)
 device_manager: DeviceManager | None = None
 
 
-# === Pydantic Models ===
-class ControlRequest(BaseModel):
-    is_on: bool
-    child_id: str | None = None
-
-
 def _err(error: str, message: str) -> dict:
-    return {"error": error, "message": message}
-
-
-def _build_response(device: Device) -> dict:
-    """Compose DeviceInfo + DeviceState into an API response dict."""
-    info = device.info
-    state = device.state
-    return {
-        "id": state.id,
-        "name": info.name,
-        "type": info.type,
-        "group": info.group,
-        "status": state.status.value,
-        "is_on": state.is_on,
-        "alias": state.alias,
-        "model": state.model,
-        "is_strip": state.is_strip,
-        "children": [asdict(c) for c in state.children] if state.children else None,
-        "last_updated": state.last_updated.isoformat() if state.last_updated else None,
-    }
+    return ErrorDetail(error=error, message=message).model_dump()
 
 
 # === Dependency ===
@@ -91,22 +65,22 @@ app = FastAPI(
 
 
 # === API v1 Endpoints ===
-@app.get("/api/v1/devices")
+@app.get("/api/v1/devices", response_model=DeviceListResponse)
 def list_devices(dm: DeviceManager = Depends(get_device_manager)):
     """Get cached status of all devices (zero I/O)."""
-    return {"devices": [_build_response(d) for d in dm.get_all_devices()]}
+    return DeviceListResponse(devices=[DeviceResponse.from_device(d) for d in dm.get_all_devices()])
 
 
-@app.get("/api/v1/devices/{device_id}")
+@app.get("/api/v1/devices/{device_id}", response_model=DeviceResponse)
 def get_device(device_id: str, dm: DeviceManager = Depends(get_device_manager)):
     """Get a single device's cached status."""
     try:
-        return _build_response(dm.get_device(device_id))
+        return DeviceResponse.from_device(dm.get_device(device_id))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=_err("not_found", str(e)))
 
 
-@app.patch("/api/v1/devices/{device_id}")
+@app.patch("/api/v1/devices/{device_id}", response_model=DeviceResponse)
 async def control_device(
     device_id: str,
     request: ControlRequest,
@@ -116,7 +90,7 @@ async def control_device(
     action = "on" if request.is_on else "off"
     try:
         await dm.set_device_power(device_id=device_id, action=action, child_id=request.child_id)
-        return _build_response(dm.get_device(device_id))
+        return DeviceResponse.from_device(dm.get_device(device_id))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=_err("invalid_request", str(e)))
     except DeviceOfflineError as e:
@@ -136,7 +110,10 @@ async def refresh_device(
         await dm.refresh_device(device_id)
         device = dm.get_device(device_id)
         code = 200 if device.state.status == DeviceStatus.ONLINE else 503
-        return JSONResponse(content=_build_response(device), status_code=code)
+        return JSONResponse(
+            content=DeviceResponse.from_device(device).model_dump(mode='json'),
+            status_code=code,
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=_err("not_found", str(e)))
 
@@ -149,13 +126,18 @@ async def device_events(dm: DeviceManager = Depends(get_device_manager)):
     """SSE stream: push on state change, heartbeat comment when idle."""
     q = dm.subscribe()
 
+    def _snapshot() -> str:
+        return DeviceListResponse(
+            devices=[DeviceResponse.from_device(d) for d in dm.get_all_devices()]
+        ).model_dump_json()
+
     async def generator():
         try:
-            yield f"data: {json.dumps({'devices': [_build_response(d) for d in dm.get_all_devices()]})}\n\n"
+            yield f"data: {_snapshot()}\n\n"
             while True:
                 try:
                     await asyncio.wait_for(q.get(), timeout=_SSE_HEARTBEAT)
-                    yield f"data: {json.dumps({'devices': [_build_response(d) for d in dm.get_all_devices()]})}\n\n"
+                    yield f"data: {_snapshot()}\n\n"
                 except asyncio.TimeoutError:
                     yield ": heartbeat\n\n"
         finally:

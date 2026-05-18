@@ -4,7 +4,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from ..kasa import KasaBackend, KasaDeviceConfig, discover_all as kasa_discover, parse_config as kasa_parse
-from .models import DeviceBackend, DeviceInfo
+from .backend import DeviceBackend
+from .models import DeviceInfo
 
 
 @dataclass(frozen=True)

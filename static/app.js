@@ -282,7 +282,9 @@ function renderDeviceCard(device) {
 
     const refreshBtn = !online ? `
         <button class="btn btn-sm refresh-device-btn"
-                onclick="handleRefresh('${device.id}')" title="Refresh">
+                data-device-id="${escapeHtml(device.id)}"
+                data-refresh
+                title="Refresh">
             &#x21bb;
         </button>
     ` : ''
@@ -320,18 +322,27 @@ function renderChildOutlet(deviceId, child, online) {
 }
 
 function renderToggleSwitch(deviceId, childId, isOn, enabled) {
-    const childParam = childId !== null ? `'${childId}'` : 'null'
     const action = isOn ? 'off' : 'on'
     const onClass = isOn ? 'is-on' : ''
     const disabledAttr = enabled ? '' : 'disabled'
+    const childAttr = childId !== null ? `data-child-id="${escapeHtml(childId)}"` : ''
 
     return `
         <button class="toggle-switch ${onClass}"
-                onclick="handleToggle('${deviceId}', '${action}', ${childParam})"
+                data-device-id="${escapeHtml(deviceId)}"
+                data-action="${action}"
+                ${childAttr}
                 title="${isOn ? 'Turn off' : 'Turn on'}"
                 ${disabledAttr}>
         </button>
     `
+}
+
+function getTargetLabel(device, childId) {
+    const name = device.name || device.id
+    if (!childId || !device.children) return name
+    const child = device.children.find(c => c.id === childId)
+    return child ? `${name} / ${child.alias}` : name
 }
 
 async function loadDevices() {
@@ -353,25 +364,11 @@ async function handleToggle(deviceId, action, childId) {
         const result = await controlDevice(deviceId, action, childId)
         currentDevices[deviceId] = result
         updateCardFromState(deviceId, result)
-        const deviceName = result.name || deviceId
-        let msg = `Turned ${action}: ${deviceName}`
-        if (childId && result.children) {
-            const child = result.children.find(c => c.id === childId)
-            if (child) msg = `Turned ${action}: ${deviceName} / ${child.alias}`
-        }
-        showToast(msg, 'success')
+        showToast(`Turned ${action}: ${getTargetLabel(result, childId)}`, 'success')
     } catch (error) {
         console.error('Toggle error:', error)
-        const deviceName = currentDevices[deviceId]?.name || deviceId
-        let target = deviceName
-        if (childId) {
-            const prev = currentDevices[deviceId]
-            if (prev?.children) {
-                const child = prev.children.find(c => c.id === childId)
-                if (child) target = `${deviceName} / ${child.alias}`
-            }
-        }
-        showToast(`${error.message}: ${target}`)
+        const prev = currentDevices[deviceId]
+        showToast(`${error.message}: ${prev ? getTargetLabel(prev, childId) : deviceId}`)
     } finally {
         pendingToggles.delete(deviceId)
         if (card) card.classList.remove('loading')
@@ -417,32 +414,21 @@ function updateCardFromState(deviceId, device) {
 
     if (device.children && device.children.length > 0) {
         for (const child of device.children) {
-            const buttons = card.querySelectorAll('.toggle-switch')
-            for (const btn of buttons) {
-                const onclick = btn.getAttribute('onclick') || ''
-                if (onclick.includes(`'${child.id}'`)) {
-                    updateToggleButton(btn, deviceId, child.id, child.is_on)
-                    const outlet = btn.closest('.child-outlet')
-                    if (outlet) {
-                        outlet.classList.toggle('is-on', child.is_on)
-                    }
-                    break
-                }
+            const btn = card.querySelector(`.toggle-switch[data-child-id="${child.id}"]`)
+            if (btn) {
+                updateToggleButton(btn, child.id, child.is_on)
+                btn.closest('.child-outlet')?.classList.toggle('is-on', child.is_on)
             }
         }
     } else if (device.is_on !== undefined && device.is_on !== null) {
         const btn = card.querySelector('.single-device-control .toggle-switch')
-        if (btn) {
-            updateToggleButton(btn, deviceId, null, device.is_on)
-        }
+        if (btn) updateToggleButton(btn, null, device.is_on)
     }
 }
 
-function updateToggleButton(btn, deviceId, childId, isOn) {
-    const action = isOn ? 'off' : 'on'
-    const childParam = childId !== null ? `'${childId}'` : 'null'
+function updateToggleButton(btn, childId, isOn) {
     btn.classList.toggle('is-on', isOn)
-    btn.setAttribute('onclick', `handleToggle('${deviceId}', '${action}', ${childParam})`)
+    btn.dataset.action = isOn ? 'off' : 'on'
     btn.setAttribute('title', isOn ? 'Turn off' : 'Turn on')
 }
 
@@ -503,6 +489,16 @@ function connectSSE() {
 document.addEventListener('DOMContentLoaded', () => {
     loadDevices()
     connectSSE()
+
+    document.getElementById('devices-container').addEventListener('click', e => {
+        const toggleBtn = e.target.closest('.toggle-switch:not([disabled])')
+        if (toggleBtn) {
+            handleToggle(toggleBtn.dataset.deviceId, toggleBtn.dataset.action, toggleBtn.dataset.childId ?? null)
+            return
+        }
+        const refreshBtn = e.target.closest('[data-refresh]')
+        if (refreshBtn) handleRefresh(refreshBtn.dataset.deviceId)
+    })
 
     const searchInput = document.getElementById('search-input')
     if (searchInput) {

@@ -7,13 +7,9 @@ import time
 import uuid
 from datetime import datetime
 
-from .core.models import (
-    Command,
-    CommandStatus,
-    Device,
-    DeviceOfflineError,
-    DeviceState,
-)
+from .core.backend import Command, CommandStatus
+from .core.exceptions import DeviceOfflineError
+from .core.models import Device, DeviceState
 
 logger = logging.getLogger(__name__)
 
