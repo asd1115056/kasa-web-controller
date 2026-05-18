@@ -11,7 +11,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .device_manager import DeviceManager
-from .core.models import DeviceOfflineError, DeviceOperationError, DeviceStatus
+from .core.exceptions import DeviceOfflineError, DeviceOperationError
+from .core.models import DeviceStatus
 from .schemas import ControlRequest, DeviceListResponse, DeviceResponse, ErrorDetail
 
 PROJECT_ROOT = Path(__file__).parent.parent
